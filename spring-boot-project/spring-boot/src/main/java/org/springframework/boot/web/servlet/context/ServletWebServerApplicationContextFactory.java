@@ -48,9 +48,12 @@ class ServletWebServerApplicationContextFactory implements ApplicationContextFac
 	}
 
 	private ConfigurableApplicationContext createContext() {
+		//todo 检查是否使用 AOT 生成的构件（编译期优化）
 		if (!AotDetector.useGeneratedArtifacts()) {
+			//todo 标准模式：使用注解配置的上下文
 			return new AnnotationConfigServletWebServerApplicationContext();
 		}
+		//todo AOT 模式：使用轻量级上下文（跳过运行时注解处理）
 		return new ServletWebServerApplicationContext();
 	}
 

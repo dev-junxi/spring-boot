@@ -298,47 +298,116 @@ public class SpringApplication {
 	}
 
 	/**
+	 * graph TD
+	 *     A[启动 Startup 统计] --> B[注册 Shutdown Hook]
+	 *     B --> C[创建 BootstrapContext]
+	 *     C --> D[发布 ApplicationStartingEvent]
+	 *     D --> E[准备 Environment]
+	 *     E --> F[发布 ApplicationEnvironmentPreparedEvent]
+	 *     F --> G[打印 Banner]
+	 *     G --> H[创建 ApplicationContext]
+	 *     H --> I[准备 Context]
+	 *     I --> J[发布 ApplicationContextInitializedEvent]
+	 *     J --> K[刷新 Context]
+	 *     K --> L[发布 ContextRefreshedEvent]
+	 *     L --> M[发布 ApplicationStartedEvent]
+	 *     M --> N[执行 Runners]
+	 *     N --> O[发布 ApplicationReadyEvent]
+	 *
+	 *
+	 * 关键设计思想
+	 *     事件驱动架构
+	 *     通过 SpringApplicationRunListener 的分阶段事件，解耦启动流程与扩展逻辑（如监控、日志）。
+	 *
+	 *     模块化职责分离
+	 *         BootstrapContext：早期初始化。
+	 *         Environment：配置管理。
+	 *         ApplicationContext：Bean 生命周期管理。
+	 *
+	 *     扩展性
+	 *         监听器：响应事件（如 Environment 准备完成后加载配置）。
+	 *         Runner：延迟执行业务初始化代码。
+	 *
+	 *     防御性编程
+	 *     每个阶段独立异常处理，确保资源释放。
+	 *
 	 * Run the Spring application, creating and refreshing a new
 	 * {@link ApplicationContext}.
 	 * @param args the application arguments (usually passed from a Java main method)
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
-		//
+		//todo 创建性能统计对象：用于记录启动各阶段耗时，用于监控和日志输出
 		Startup startup = Startup.create();
+		//todo 注册 JVM 关闭钩子，确保应用优雅停机（如调用 context.close()）
 		if (this.registerShutdownHook) {
 			SpringApplication.shutdownHook.enableShutdownHookAddition();
 		}
+		//todo 创建引导上下文:提供早期初始化阶段的临时依赖存储（如 Environment 尚未就绪时）。
 		DefaultBootstrapContext bootstrapContext = createBootstrapContext();
 		ConfigurableApplicationContext context = null;
+		//todo 开启无头模式
 		configureHeadlessProperty();
+		//todo 初始化事件监听器
+		//   getRunListeners() 从 META-INF/spring.factories 加载所有 SpringApplicationRunListener 实现。
+		//   listeners.starting() 发布 ApplicationStartingEvent（最早的生命周期事件）。
 		SpringApplicationRunListeners listeners = getRunListeners(args);
 		listeners.starting(bootstrapContext, this.mainApplicationClass); //todo 发布项目开始启动的事件 需要验证一下 因为 EventPublishingRunListener 会发布 ApplicationStartingEvent。
 		try {
+			//todo 准备环境 (Environment)
+			//    根据 spring.profiles.active 初始化环境（如 application-dev.yml）。
+			//    发布 ApplicationEnvironmentPreparedEvent，允许监听器修改环境（如 ConfigFileApplicationListener 加载配置文件）。
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
-			ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
+			ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments); //todo 环境准备完成事件
+			//todo  打印 Banner
+			//		作用：控制台输出 Spring Boot 的 ASCII Art（可通过 banner.txt 自定义）。
 			Banner printedBanner = printBanner(environment);
+			//todo 创建应用上下文 (ApplicationContext)
+			//		  策略：
+			//        Web 环境：创建 AnnotationConfigServletWebServerApplicationContext。
+			//        非 Web 环境：创建 AnnotationConfigApplicationContext。
 			context = createApplicationContext();
-			context.setApplicationStartup(this.applicationStartup);
-			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner);
+			context.setApplicationStartup(this.applicationStartup); //可观测性
+			//todo 准备上下文
+			//    关键操作：
+			//        注册主配置类（mainApplicationClass）为 Bean 定义。
+			//        发布 ApplicationContextInitializedEvent，允许扩展 ApplicationContextInitializer。
+			//        加载所有 BeanDefinition（如 @ComponentScan 扫描的类）。
+			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner); //todo 上下文准备完成事件
+			//todo 刷新上下文（核心阶段）
+			//    核心子流程：
+			//        BeanFactory 准备：初始化 BeanFactoryPostProcessor（如 ConfigurationClassPostProcessor 解析 @Bean）。
+			//        Bean 实例化：调用 BeanPostProcessor，触发依赖注入。
+			//        内嵌 Web 服务器启动（如 Tomcat）。
+			//        发布 ContextRefreshedEvent。
 			refreshContext(context);
+			//todo 启动后处理
+			//    关键事件：
+			//        listeners.started() 发布 ApplicationStartedEvent（上下文已刷新，但 CommandLineRunner 未执行）。
+			//        记录启动耗时。
 			afterRefresh(context, applicationArguments);
 			startup.started();
 			if (this.logStartupInfo) {
 				new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), startup);
 			}
-			listeners.started(context, startup.timeTakenToStarted());
+			listeners.started(context, startup.timeTakenToStarted()); //todo 启动完成事件
+			//todo  执行 Runner 回调
+			//		作用：执行所有 ApplicationRunner 和 CommandLineRunner 的 run() 方法（如初始化数据）。
 			callRunners(context, applicationArguments);
 		}
 		catch (Throwable ex) {
 			if (ex instanceof AbandonedRunException) {
 				throw ex;
 			}
+			//todo 异常处理
+			// 	流程：发布 ApplicationFailedEvent 并关闭上下文。
 			handleRunFailure(context, ex, listeners);
 			throw new IllegalStateException(ex);
 		}
 		try {
 			if (context.isRunning()) {
+				//todo 应用就绪
+				//	事件：发布 ApplicationReadyEvent（标志应用完全就绪）。
 				listeners.ready(context, startup.ready());
 			}
 		}
@@ -389,6 +458,15 @@ public class SpringApplication {
 		return environmentType;
 	}
 
+	/**
+	 *
+	 * @param bootstrapContext 引导阶段的临时上下文，用于早期 Bean 注册（如 Environment）。
+	 * @param context 当前应用上下文（如 AnnotationConfigServletWebServerApplicationContext）。
+	 * @param environment 已准备好的配置环境（包含 application.yml、命令行参数等）。
+	 * @param listeners 事件监听器集合，用于发布生命周期事件。
+	 * @param applicationArguments 应用启动参数（-- 开头的命令行参数）。
+	 * @param printedBanner 启动时打印的 Banner 对象
+	 */
 	private void prepareContext(DefaultBootstrapContext bootstrapContext, ConfigurableApplicationContext context,
 			ConfigurableEnvironment environment, SpringApplicationRunListeners listeners,
 			ApplicationArguments applicationArguments, Banner printedBanner) {

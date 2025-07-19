@@ -63,8 +63,10 @@ class DefaultApplicationContextFactory implements ApplicationContextFactory {
 		return new GenericApplicationContext();
 	}
 
-	private <T> T getFromSpringFactories(WebApplicationType webApplicationType,
+	private <T> T getFromSpringFactories(WebApplicationType webApplicationType,// SERVLET
 			BiFunction<ApplicationContextFactory, WebApplicationType, T> action, Supplier<T> defaultResult) {
+		// todo 获取spring.factories中所有的ApplicationContextFactory
+		//		ReactiveWebServerApplicationContextFactory/ServletWebServerApplicationContextFactory
 		for (ApplicationContextFactory candidate : SpringFactoriesLoader.loadFactories(ApplicationContextFactory.class,
 				getClass().getClassLoader())) {
 			T result = action.apply(candidate, webApplicationType);
