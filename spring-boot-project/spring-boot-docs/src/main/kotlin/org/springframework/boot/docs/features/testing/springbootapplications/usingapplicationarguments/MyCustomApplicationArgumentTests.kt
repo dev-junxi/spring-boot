@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-package org.springframework.boot.docs.features.testing.springbootapplications.usingmain.custom.always
+package org.springframework.boot.docs.features.testing.springbootapplications.usingapplicationarguments
 
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.context.SpringBootTest.UseMainMethod
-import org.springframework.context.annotation.Import
 
-@SpringBootTest(useMainMethod = UseMainMethod.ALWAYS)
-class MyApplicationTests {
+@SpringBootTest(args = ["--app.test=one"])
+class MyCustomApplicationArgumentTests {
 
 	@Test
-	fun exampleTest() {
-		// ...
+	fun applicationArgumentsPopulated(@Autowired args: ApplicationArguments) {
+		assertThat(args.optionNames).containsOnly("app.test")
+		assertThat(args.getOptionValues("app.test")).containsOnly("one")
 	}
 
 }

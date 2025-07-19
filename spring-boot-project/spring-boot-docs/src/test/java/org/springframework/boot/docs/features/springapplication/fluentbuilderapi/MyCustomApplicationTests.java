@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  */
 @ExtendWith(OutputCaptureExtension.class)
-class MyApplicationTests {
+class MyCustomApplicationTests {
 
 	@Test
 	void contextHierarchyWithDisabledBanner(CapturedOutput output) {

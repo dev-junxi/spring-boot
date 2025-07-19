@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-package org.springframework.boot.docs.features.springapplication;
+package org.springframework.boot.docs.features.testing.springbootapplications.usingmain.custom.always
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.SpringBootTest.UseMainMethod
+import org.springframework.context.annotation.Import
 
-@SpringBootApplication
-public class MyApplication {
+@SpringBootTest(useMainMethod = UseMainMethod.ALWAYS)
+class MyCustomApplicationTests {
 
-	public static void main(String[] args) {
-		SpringApplication.run(MyApplication.class, args);
+	@Test
+	fun exampleTest() {
+		// ...
 	}
 
 }

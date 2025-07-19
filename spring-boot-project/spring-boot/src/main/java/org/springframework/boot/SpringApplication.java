@@ -304,6 +304,7 @@ public class SpringApplication {
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
+		//
 		Startup startup = Startup.create();
 		if (this.registerShutdownHook) {
 			SpringApplication.shutdownHook.enableShutdownHookAddition();
@@ -312,7 +313,7 @@ public class SpringApplication {
 		ConfigurableApplicationContext context = null;
 		configureHeadlessProperty();
 		SpringApplicationRunListeners listeners = getRunListeners(args);
-		listeners.starting(bootstrapContext, this.mainApplicationClass);
+		listeners.starting(bootstrapContext, this.mainApplicationClass); //todo 发布项目开始启动的事件 需要验证一下 因为 EventPublishingRunListener 会发布 ApplicationStartingEvent。
 		try {
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
 			ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
@@ -460,17 +461,97 @@ public class SpringApplication {
 				System.getProperty(SYSTEM_PROPERTY_JAVA_AWT_HEADLESS, Boolean.toString(this.headless)));
 	}
 
+	/**
+	 * ***
+	 * 组件								作用
+	 *
+	 * SpringApplicationRunListener		监听启动事件的接口，定义了 starting(), started(), failed() 等方法。
+	 * SpringApplicationHook			全局钩子接口，允许外部扩展监听逻辑（如 Spring Boot DevTools 使用它注入重启逻辑）。
+	 * SpringApplicationRunListeners	监听器的包装类，统一管理多个监听器的调用顺序和异常处理。
+	 * getSpringFactoriesInstances()	从 META-INF/spring.factories 加载并实例化指定类型的组件（Spring Boot 的 SPI 机制）。
+	 *
+	 *
+	 * 负责获取并初始化所有 SpringApplicationRunListener 监听器，用于在 Spring Boot 应用的启动生命周期不同阶段触发事件通知
+	 *
+	 * ****************************************************************************************************************************************************************************************************************************************************
+	 * 典型监听器示例
+	 *
+	 * Spring Boot 默认注册的监听器包括：
+	 *
+	 *     EventPublishingRunListener
+	 *     负责将启动事件转换为 ApplicationEvent 并发布（如 ApplicationStartingEvent）。
+	 *
+	 *     LoggingApplicationListener
+	 *     初始化日志系统（如 Logback 或 Log4j2）。
+	 *
+	 *     BackgroundPreinitializer
+	 *     在后台线程预初始化部分组件（如 Hibernate Validator）。
+	 *
+	 * ****************************************************************************************************************************************************************************************************************************************************
+	 *
+	 * 在 SpringApplication.run() 方法中，getRunListeners() 的返回对象用于以下关键节点：
+	 *
+	 * public ConfigurableApplicationContext run(String... args) {
+	 *     SpringApplicationRunListeners listeners = getRunListeners(args);
+	 *     listeners.starting(); // 应用启动开始
+	 *     // ...
+	 *     listeners.environmentPrepared(environment); // 环境准备完成
+	 *     // ...
+	 *     listeners.contextPrepared(context); // Context 初始化完成
+	 *     // ...
+	 *     listeners.started(context); // 应用启动成功
+	 *     // ...
+	 * }
+	 *
+	 * ****************************************************************************************************************************************************************************************************************************************************
+	 *
+	 * 扩展自定义监听器
+	 * 通过 META-INF/spring.factories 注册
+	 * org.springframework.boot.SpringApplicationRunListener=com.example.MyRunListener
+	 *
+	 * 通过 SpringApplicationHook 动态注入
+	 * SpringApplicationHook hook = app -> new MyRunListener(app);
+	 * SpringApplication.registerHook(hook);
+	 *
+	 *
+	 * ****************************************************************************************************************************************************************************************************************************************************
+	 * 面试题
+	 * Q:在 Spring Boot 3.2.0 中，SPI（Service Provider Interface）机制的加载方式发生了变化是否还能通过META-INF/spring.factories 注册？
+	 * A:是，且必须.
+	 *     新方式：
+	 *     自动配置类现在需要在 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports 文件中声明（每行一个全限定类名）。
+	 *     这是 Spring Boot 3.0+ 的推荐方式，完全替代了旧版 spring.factories 中的 org.springframework.boot.autoconfigure.EnableAutoConfiguration 键。
+	 *
+	 *     旧方式兼容性：
+	 *     Spring Boot 3.x 仍会向后兼容读取 META-INF/spring.factories 中的 EnableAutoConfiguration 配置，但未来版本可能会移除。
+	 *
+	 *     SpringApplicationRunListener 等监听器：
+	 * 	   仍然需要通过 META-INF/spring.factories 注册！
+	 *     因为这些扩展点尚未迁移到新的 AutoConfiguration.imports 机制，仍依赖传统的 SpringFactoriesLoader 加载逻辑。
+	 *
+	 *
+	 * @param args
+	 * @return
+	 */
 	private SpringApplicationRunListeners getRunListeners(String[] args) {
+		// todo 1、创建参数解析器，绑定SpringApplication示例，和启动参数args
 		ArgumentResolver argumentResolver = ArgumentResolver.of(SpringApplication.class, this);
 		argumentResolver = argumentResolver.and(String[].class, args);
+
+		//todo 2、通过SPI机制加载SpringApplicationRunListener 实现类
 		List<SpringApplicationRunListener> listeners = getSpringFactoriesInstances(SpringApplicationRunListener.class,
 				argumentResolver);
+
+		//todo 3、检查是否有全局HOOK注册自定义监听器
 		SpringApplicationHook hook = applicationHook.get();
 		SpringApplicationRunListener hookListener = (hook != null) ? hook.getRunListener(this) : null;
+
+		//todo 4、合并到主列表
 		if (hookListener != null) {
-			listeners = new ArrayList<>(listeners);
+			listeners = new ArrayList<>(listeners); //浅拷贝、将elementData指针直接指向了listeners
 			listeners.add(hookListener);
 		}
+		//todo 5、包装监听器并返回
 		return new SpringApplicationRunListeners(logger, listeners, this.applicationStartup);
 	}
 
@@ -1339,6 +1420,7 @@ public class SpringApplication {
 	 * @return the running {@link ApplicationContext}
 	 */
 	public static ConfigurableApplicationContext run(Class<?>[] primarySources, String[] args) {
+		// todo 构建SpringApplication对象，并调用其run方法来启动项目
 		return new SpringApplication(primarySources).run(args);
 	}
 

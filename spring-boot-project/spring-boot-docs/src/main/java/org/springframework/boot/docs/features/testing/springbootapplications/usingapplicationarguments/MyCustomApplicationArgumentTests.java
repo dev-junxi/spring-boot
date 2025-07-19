@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,23 @@
  * limitations under the License.
  */
 
-package org.springframework.boot.docs.features.testing.springbootapplications.usingmain.always;
+package org.springframework.boot.docs.features.testing.springbootapplications.usingapplicationarguments;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.SpringBootTest.UseMainMethod;
 
-@SpringBootTest(useMainMethod = UseMainMethod.ALWAYS)
-class MyApplicationTests {
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(args = "--app.test=one")
+class MyCustomApplicationArgumentTests {
 
 	@Test
-	void exampleTest() {
-		// ...
+	void applicationArgumentsPopulated(@Autowired ApplicationArguments args) {
+		assertThat(args.getOptionNames()).containsOnly("app.test");
+		assertThat(args.getOptionValues("app.test")).containsOnly("one");
 	}
 
 }
