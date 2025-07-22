@@ -470,29 +470,43 @@ public class SpringApplication {
 	private void prepareContext(DefaultBootstrapContext bootstrapContext, ConfigurableApplicationContext context,
 			ConfigurableEnvironment environment, SpringApplicationRunListeners listeners,
 			ApplicationArguments applicationArguments, Banner printedBanner) {
+		//todo 将环境绑定到上下文
 		context.setEnvironment(environment);
+		//todo 后处理上下文（如设置 Bean 名称）
 		postProcessApplicationContext(context);
+
+		//todo 添加AOT生成的初始化器
+		//     初始化器的作用：在上下文刷新前修改其配置（如注册自定义 BeanDefinition）。
 		addAotGeneratedInitializerIfNecessary(this.initializers);
+		//todo 调用所有初始化器的 initialize 方法
 		applyInitializers(context);
+		//todo 发布ApplicationContextInitializedEvent
 		listeners.contextPrepared(context);
+		//todo 关闭BootStrapContext,并将其内容迁移到主上下文中
 		bootstrapContext.close(context);
+		//todo 打印启动信息
 		if (this.logStartupInfo) {
-			logStartupInfo(context.getParent() == null);
-			logStartupProfileInfo(context);
+			logStartupInfo(context.getParent() == null); // 打印应用信息（如）
+			logStartupProfileInfo(context); // 打印激活的 Profile
 		}
 		// Add boot specific singleton beans
 		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+		//todo SpringApplicationArguments : 命令行参数，可通过@Autowired注入
 		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
 		if (printedBanner != null) {
+			//todo 启动时打印的Banner
 			beanFactory.registerSingleton("springBootBanner", printedBanner);
 		}
 		if (beanFactory instanceof AbstractAutowireCapableBeanFactory autowireCapableBeanFactory) {
+			//todo 允许循环依赖 （默认为 true）
 			autowireCapableBeanFactory.setAllowCircularReferences(this.allowCircularReferences);
 			if (beanFactory instanceof DefaultListableBeanFactory listableBeanFactory) {
+				//todo 允许覆盖Bean 定义
 				listableBeanFactory.setAllowBeanDefinitionOverriding(this.allowBeanDefinitionOverriding);
 			}
 		}
 		if (this.lazyInitialization) {
+			///todo 所有 Bean 将在首次使用时创建（减少启动时间，但可能增加运行时延迟）。
 			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
 		}
 		if (this.keepAlive) {
@@ -748,23 +762,42 @@ public class SpringApplication {
 	}
 
 	/**
+	 * 在上下文创建后、刷新前，应用额外的自定义配置。
+	 * 设计意图：允许子类通过覆盖此方法扩展上下文处理逻辑（符合 开闭原则）。
+	 *
 	 * Apply any relevant post-processing to the {@link ApplicationContext}. Subclasses
 	 * can apply additional processing as required.
 	 * @param context the application context
 	 */
 	protected void postProcessApplicationContext(ConfigurableApplicationContext context) {
+		//todo 若用户通过 SpringApplication.setBeanNameGenerator() 指定了生成器，将其注册为单例 Bean。
 		if (this.beanNameGenerator != null) {
+			//todo 关键点：
+			//    CONFIGURATION_BEAN_NAME_GENERATOR 是 Spring 内部用于生成 @Configuration 类中 @Bean 方法名称的生成器。
+			//    默认使用 AnnotationBeanNameGenerator，可替换为自定义实现（如保证命名唯一性）。
 			context.getBeanFactory()
 				.registerSingleton(AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR, this.beanNameGenerator);
 		}
+		//todo 统一资源加载策略，确保上下文能正确加载类路径、文件等资源。
+		//	  场景：
+		//    用户通过 SpringApplication.setResourceLoader() 指定了自定义 ResourceLoader（如用于模块化环境）。
+		//    影响 @Value("classpath:...")、Resource 注入等行为。
 		if (this.resourceLoader != null) {
+			//todo 针对GenericApplicationContext 设置资源加载器
 			if (context instanceof GenericApplicationContext genericApplicationContext) {
 				genericApplicationContext.setResourceLoader(this.resourceLoader);
 			}
+			//todo 针对 DefaultResourceLoader 设置类加载器
 			if (context instanceof DefaultResourceLoader defaultResourceLoader) {
 				defaultResourceLoader.setClassLoader(this.resourceLoader.getClassLoader());
 			}
 		}
+		//todo 配置类型转换服务（ConversionService）
+		//	  作用：
+		//    将 Environment 中的 ConversionService 注册到 BeanFactory，用于处理属性转换（如 @Value("${duration}") Duration）
+		//    默认行为：
+		//    addConversionService 默认为 true，除非显式关闭。
+		//    Environment 默认内置 ApplicationConversionService（支持常用类型转换）。
 		if (this.addConversionService) {
 			context.getBeanFactory().setConversionService(context.getEnvironment().getConversionService());
 		}
