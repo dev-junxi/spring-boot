@@ -371,7 +371,7 @@ public class SpringApplication {
 			//todo 准备上下文
 			//    关键操作：
 			//        注册主配置类（mainApplicationClass）为 Bean 定义。
-			//        发布 ApplicationContextInitializedEvent，允许扩展 ApplicationContextInitializer。
+			//        发布 ApplicationContextInitializedEvent，允许扩展。
 			//        加载所有 BeanDefinition（如 @ComponentScan 扫描的类）。
 			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner); //todo 上下文准备完成事件
 			//todo 刷新上下文（核心阶段）
@@ -459,7 +459,17 @@ public class SpringApplication {
 	}
 
 	/**
+	 *    环境整合：
+	 *     将 Environment、命令行参数等绑定到上下文。
 	 *
+	 *     扩展点暴露：
+	 *     通过初始化器和事件允许外部定制上下文。
+	 *
+	 *     关键 Bean 预注册：
+	 *     确保 BeanFactory 在刷新前具备必要的基础设施。
+	 *
+	 *     条件化配置：
+	 *     根据 AOT、延迟初始化等标志调整行为。
 	 * @param bootstrapContext 引导阶段的临时上下文，用于早期 Bean 注册（如 Environment）。
 	 * @param context 当前应用上下文（如 AnnotationConfigServletWebServerApplicationContext）。
 	 * @param environment 已准备好的配置环境（包含 application.yml、命令行参数等）。
@@ -505,22 +515,27 @@ public class SpringApplication {
 				listableBeanFactory.setAllowBeanDefinitionOverriding(this.allowBeanDefinitionOverriding);
 			}
 		}
-		if (this.lazyInitialization) {
+		if (this.lazyInitialization) { //false
 			///todo 所有 Bean 将在首次使用时创建（减少启动时间，但可能增加运行时延迟）。
 			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
 		}
+		//todo 保活线程，防止非Web应用因无活动线程而退出
 		if (this.keepAlive) {
 			KeepAlive keepAlive = new KeepAlive();
 			keepAlive.start();
 			context.addApplicationListener(keepAlive);
 		}
 		context.addBeanFactoryPostProcessor(new PropertySourceOrderingBeanFactoryPostProcessor(context));
+
+		//todo 加载主配置类 触发 @ComponentScan 扫描和 @Bean 方法的解析。
 		if (!AotDetector.useGeneratedArtifacts()) {
 			// Load the sources
-			Set<Object> sources = getAllSources();
+			Set<Object> sources = getAllSources(); //获取主类 （@SpringBootApplication 标注的类）
 			Assert.notEmpty(sources, "Sources must not be empty");
-			load(context, sources.toArray(new Object[0]));
+			load(context, sources.toArray(new Object[0])); //注册主类为Bean定义
 		}
+		//todo 发布上下文加载完成事件 发布ApplicationPreparedEvent
+		//		LoggingApplicationListener 在此阶段初始化日志系统。
 		listeners.contextLoaded(context);
 	}
 
@@ -541,10 +556,32 @@ public class SpringApplication {
 		}
 	}
 
+	/**
+	 * 完成应用上下文的最终初始化，并确保其可响应生命周期事件（如优雅关闭）。
+	 * 在 SpringApplication.run() 的主流程中，位于环境准备和 Runner 回调之间。
+	 * @param context
+	 */
 	private void refreshContext(ConfigurableApplicationContext context) {
+		//todo 注册 Shutdown Hook（可选）
+		//	  作用：
+		//    	  向 JVM 注册一个钩子，确保应用在关闭时（如 Ctrl+C 或 kill 命令）能优雅地销毁 Bean 并释放资源。
+		//    关键点：
+		//        registerShutdownHook 默认为 true，可通过 SpringApplication.setRegisterShutdownHook(false) 关闭。
+		//        实际调用 context.registerShutdownHook()，最终触发 ConfigurableApplicationContext.close()。
+		//        生产环境建议始终启用，避免资源泄漏。
 		if (this.registerShutdownHook) {
 			shutdownHook.registerApplicationContext(context);
 		}
+		//todo 刷新上下文（核心操作）
+		//    内部逻辑：
+		//    调用 context.refresh() 方法（具体实现取决于上下文类型，如 AbstractApplicationContext.refresh()），核心步骤包括：
+		//        1、准备 BeanFactory：初始化标准 Bean 工厂配置（如类加载器、EL 解析器）。
+		//        2、执行 BeanFactoryPostProcessor：处理 @Configuration 类、@Bean 方法等。
+		//        3、注册 BeanPostProcessor：为后续 Bean 实例化提供扩展点（如 AOP 代理）。
+		//        4、初始化消息源（MessageSource）：支持国际化。
+		//        5、初始化事件广播器：用于发布 ContextRefreshedEvent。
+		//        6、实例化非延迟单例 Bean：完成依赖注入和初始化回调（如 @PostConstruct）。
+		//        7、完成刷新：发布 ContextRefreshedEvent，标志上下文就绪。
 		refresh(context);
 	}
 
