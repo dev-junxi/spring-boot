@@ -278,9 +278,32 @@ public class SpringApplication {
 		Assert.notNull(primarySources, "PrimarySources must not be null");
 		this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
 		this.webApplicationType = WebApplicationType.deduceFromClasspath();
+		//todo 这几行代码是 Spring Boot 启动过程中 加载扩展组件 的核心逻辑，通过 Spring 的 SPI（Service Provider Interface）机制从
+		// META-INF/spring.factories 文件中加载三类关键扩展组件。
+		//作用：
+		//获取所有 BootstrapRegistryInitializer 实现类实例，用于 引导阶段（Bootstrap Phase） 的初始化。
+		//
+		//典型场景：
+		//在 Environment 准备之前注册早期单例 Bean（如自定义配置源）。
 		this.bootstrapRegistryInitializers = new ArrayList<>(
 				getSpringFactoriesInstances(BootstrapRegistryInitializer.class));
+		//作用：
+		//获取所有 ApplicationContextInitializer 实现类实例，用于在 应用上下文刷新前 对其进行定制。
+		//典型用途：
+		//    注册额外的 BeanDefinition
+		//    修改 Environment 配置
+		//    设置活跃的 Profile
+		//SpringApplication.run()
+		//    └─> prepareContext()
+		//        └─> applyInitializers(context) // 调用所有初始化器
+		//            └─> MyInitializer.initialize()
 		setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+		//作用：
+		//获取所有 ApplicationListener 实现类实例，用于监听 Spring 应用事件（如 ContextRefreshedEvent）。
+		//典型场景：
+		//    在容器启动完成后执行初始化逻辑
+		//    监听特定事件进行资源清理
+		//	  可监听早期的事件
 		setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
 		this.mainApplicationClass = deduceMainApplicationClass();
 	}
@@ -423,6 +446,7 @@ public class SpringApplication {
 
 	private DefaultBootstrapContext createBootstrapContext() {
 		DefaultBootstrapContext bootstrapContext = new DefaultBootstrapContext();
+		//todo 引导context 早期干预
 		this.bootstrapRegistryInitializers.forEach((initializer) -> initializer.initialize(bootstrapContext));
 		return bootstrapContext;
 	}

@@ -57,6 +57,35 @@ public enum WebApplicationType {
 
 	private static final String JERSEY_INDICATOR_CLASS = "org.glassfish.jersey.servlet.ServletContainer";
 
+	/**
+	 * 这段代码是 Spring Boot 中用于 自动推断当前应用类型 的核心方法，通过检查类路径（classpath）上是否存在特定的关键类，
+	 * 决定应用是 Servlet Web 应用（如 Spring MVC）、响应式 Web 应用（如 WebFlux） 还是 非 Web 应用。
+	 * @return
+	 *
+	 * 场景 1：Spring MVC 项目
+	 *
+	 *     依赖：spring-boot-starter-web
+	 *
+	 *     类路径：存在 DispatcherServlet，不存在 DispatcherHandler
+	 *
+	 *     推断结果：WebApplicationType.SERVLET
+	 *
+	 * 场景 2：WebFlux 项目
+	 *
+	 *     依赖：spring-boot-starter-webflux，不包含 spring-boot-starter-web
+	 *
+	 *     类路径：存在 DispatcherHandler，不存在 DispatcherServlet
+	 *
+	 *     推断结果：WebApplicationType.REACTIVE
+	 *
+	 * 场景 3：控制台应用
+	 *
+	 *     依赖：无 Web 相关 starter
+	 *
+	 *     类路径：缺少 Servlet 和 WebFlux 类
+	 *
+	 *     推断结果：WebApplicationType.NONE
+	 */
 	static WebApplicationType deduceFromClasspath() {
 		if (ClassUtils.isPresent(WEBFLUX_INDICATOR_CLASS, null) && !ClassUtils.isPresent(WEBMVC_INDICATOR_CLASS, null)
 				&& !ClassUtils.isPresent(JERSEY_INDICATOR_CLASS, null)) {
