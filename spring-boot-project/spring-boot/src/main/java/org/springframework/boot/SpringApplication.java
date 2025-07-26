@@ -395,7 +395,7 @@ public class SpringApplication {
 			//    关键操作：
 			//        注册主配置类（mainApplicationClass）为 Bean 定义。
 			//        发布 ApplicationContextInitializedEvent，允许扩展。
-			//        加载所有 BeanDefinition（如 @ComponentScan 扫描的类）。
+			//        注册 BeanNameGenerator、ClassLoader 等基础组件。
 			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner); //todo 上下文准备完成事件
 			//todo 刷新上下文（核心阶段）
 			//    核心子流程：
@@ -454,18 +454,47 @@ public class SpringApplication {
 	private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
 			DefaultBootstrapContext bootstrapContext, ApplicationArguments applicationArguments) {
 		// Create and configure the environment
+		//todo 创建或获取环境对象
+		//    逻辑：
+		//        根据应用类型（Web 或非 Web）创建对应的环境对象
+		//        若已存在环境对象（如测试时注入），则直接复用。
 		ConfigurableEnvironment environment = getOrCreateEnvironment();
+		//todo 配置环境
+		//    逻辑：
+		//        解析命令行参数（--spring.profiles.active=dev 等），将其添加到环境的 PropertySource 中。
+		//        加载默认配置（如 application.properties/application.yml）。
 		configureEnvironment(environment, applicationArguments.getSourceArgs());
+		//todo 绑定配置属性源
+		//	    逻辑：
+		//        将环境中的属性源（PropertySource）包装为 ConfigurationPropertySources，
+		//        支持 Spring Boot 的松散绑定（如 spring.main.web-application-type 和 spring.main.webApplicationType 等效）。
 		ConfigurationPropertySources.attach(environment);
+		//todo 触发环境准备事件
+		// 逻辑：
+		//    通知所有 SpringApplicationRunListener 实现（如 EventPublishingRunListener），发布 ApplicationEnvironmentPreparedEvent 事件。
+		//	  典型监听器：
+		//    	ConfigFileApplicationListener：加载 application-{profile}.yml。
+		//    	LoggingApplicationListener：初始化日志系统。
 		listeners.environmentPrepared(bootstrapContext, environment);
+		//todo 调整属性源顺序
+		//    逻辑：
+		//        将 DefaultPropertiesPropertySource（通过 SpringApplication.setDefaultProperties()
+		//        设置的默认属性）移动到属性源末尾，确保用户配置优先覆盖默认值。
 		DefaultPropertiesPropertySource.moveToEnd(environment);
 		Assert.state(!environment.containsProperty("spring.main.environment-prefix"),
 				"Environment prefix cannot be set via properties.");
+		//todo 绑定环境到 SpringApplication
+		//	    逻辑：
+		//        将环境中的属性（如 spring.main.*）绑定到当前 SpringApplication 实例的字段（如 setBannerMode()、setLogStartupInfo()）。
 		bindToSpringApplication(environment);
+		//todo 环境类型转换（非自定义环境时）
+
 		if (!this.isCustomEnvironment) {
 			EnvironmentConverter environmentConverter = new EnvironmentConverter(getClassLoader());
 			environment = environmentConverter.convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
 		}
+		//todo 重新绑定属性源
+		//		确保属性源的最新状态生效（尤其在环境转换后）。
 		ConfigurationPropertySources.attach(environment);
 		return environment;
 	}
