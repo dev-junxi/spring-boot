@@ -393,7 +393,7 @@ public class SpringApplication {
 			context.setApplicationStartup(this.applicationStartup); //可观测性
 			//todo 准备上下文
 			//    关键操作：
-			//        注册主配置类（mainApplicationClass）为 Bean 定义。
+			//        注册主配置类（mainApplicationClass）为 Bean 定义。 后续用于ConfigurationClassPostProcessor 解析注入配置类。
 			//        发布 ApplicationContextInitializedEvent，允许扩展。
 			//        注册 BeanNameGenerator、ClassLoader 等基础组件。
 			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner); //todo 上下文准备完成事件

@@ -133,6 +133,23 @@ public class ServletWebServerApplicationContext extends GenericWebApplicationCon
 	 * Register ServletContextAwareProcessor.
 	 * @see ServletContextAwareProcessor
 	 */
+	/**
+	 * 注册作用域：通过 ExistingWebApplicationScopes 实现“备份-注册-恢复”流程，平衡框架默认行为和用户扩展需求。
+	 *     注册 Web 相关的作用域：
+	 *     为 Web 应用添加以下 Spring 作用域（如果尚未注册）：
+	 *
+	 *         request：每个 HTTP 请求创建一个新 Bean 实例（如 @RequestScope）。
+	 *
+	 *         session：每个用户会话创建一个新 Bean 实例（如 @SessionScope）。
+	 *
+	 *         application：整个 Web 应用共享一个 Bean 实例（类似单例，但生命周期绑定到 ServletContext）。
+	 *
+	 *         websocket：WebSocket 会话级别的作用域（Spring 4.2+）。
+	 *
+	 *     保护已有作用域：
+	 *     通过 ExistingWebApplicationScopes 临时保存已注册的作用域，避免重复注册时覆盖用户自定义实现。
+	 * @param beanFactory the bean factory used by the application context
+	 */
 	@Override
 	protected void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 		beanFactory.addBeanPostProcessor(new WebApplicationContextServletContextAwareProcessor(this));
@@ -178,21 +195,58 @@ public class ServletWebServerApplicationContext extends GenericWebApplicationCon
 		}
 	}
 
+	/**
+	 *  这段代码是 Spring Boot 中用于创建嵌入式 Web 服务器的核心方法（如 Tomcat、Jetty 或 Undertow），
+	 *  属于 ServletWebServerApplicationContext 类的关键逻辑
+	 *
+	 *      核心目标：
+	 *     根据当前应用的配置，创建并启动一个嵌入式 Web 服务器，同时注册相关的生命周期管理 Bean。
+	 *
+	 *     触发时机：
+	 *     在 Spring Boot 应用启动的 refresh() 阶段，当检测到是 Web 环境时调用。
+	 *
+	 *
+	 *替换服务器：
+	 * 排除默认依赖（如 Tomcat），引入其他服务器（如 Jetty）：
+	 *
+	 *     <dependency>
+	 *     <groupId>org.springframework.boot</groupId>
+	 *     <artifactId>spring-boot-starter-web</artifactId>
+	 *     <exclusions>
+	 *         <exclusion>
+	 *             <groupId>org.springframework.boot</groupId>
+	 *             <artifactId>spring-boot-starter-tomcat</artifactId>
+	 *         </exclusion>
+	 *     </exclusions>
+	 * </dependency>
+	 * <dependency>
+	 *     <groupId>org.springframework.boot</groupId>
+	 *     <artifactId>spring-boot-starter-jetty</artifactId>
+	 * </dependency>
+	 */
 	private void createWebServer() {
 		WebServer webServer = this.webServer;
 		ServletContext servletContext = getServletContext();
 		if (webServer == null && servletContext == null) {
+			// 创建新的嵌入式服务器
 			StartupStep createWebServer = getApplicationStartup().start("spring.boot.webserver.create");
-			ServletWebServerFactory factory = getWebServerFactory();
+			ServletWebServerFactory factory = getWebServerFactory(); // 获取服务器工厂（如TomcatServletWebServerFactory）
 			createWebServer.tag("factory", factory.getClass().toString());
-			this.webServer = factory.getWebServer(getSelfInitializer());
+			//todo ServletWebServerFactory：根据依赖的服务器库（如 spring-boot-starter-tomcat）自动选择具体实现。
+			// getSelfInitializer()：返回一个 ServletContextInitializer，用于配置 Servlet、Filter 等（如注册 DispatcherServlet）。
+			this.webServer = factory.getWebServer(getSelfInitializer()); // 创建服务器实例
 			createWebServer.end();
+			//todo WebServerGracefulShutdownLifecycle：
+			// 负责优雅关闭服务器（在应用关闭时等待请求完成）。
 			getBeanFactory().registerSingleton("webServerGracefulShutdown",
 					new WebServerGracefulShutdownLifecycle(this.webServer));
+			//todo WebServerStartStopLifecycle：
+			// 控制服务器的启动和停止（与 Spring 生命周期同步）。
 			getBeanFactory().registerSingleton("webServerStartStop",
 					new WebServerStartStopLifecycle(this, this.webServer));
 		}
 		else if (servletContext != null) {
+			// 使用已有的 Servlet 容器（如外置 Tomcat）
 			try {
 				getSelfInitializer().onStartup(servletContext);
 			}
